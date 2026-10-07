@@ -28,7 +28,9 @@ small{color:#8d91a5;font-size:11.5px;display:block;margin:4px 0}
 .thumb .bgbtn.thumbbg{position:absolute;left:0;right:0;bottom:0;border-radius:0;font-size:10px;padding:3px 2px;background:#000b;line-height:1.1}
 .bgbtn.wide{width:100%;margin:6px 0 4px;background:#2d3040}
 .bgbtn:disabled{opacity:.6;cursor:wait}
-.field input[type=file]{display:block;margin-top:14px}
+.field input[type=file]{display:block;margin-top:14px;width:64px;height:64px;box-sizing:border-box;padding:0;font-size:0;color:transparent;cursor:pointer;background:#12131a url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 4v16M4 12h16' stroke='%23fff' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") center/28px no-repeat;border:1px solid #33374a;border-radius:8px}
+.field input[type=file]:hover{border-color:#e1306c}
+.field input[type=file]::file-selector-button{width:100%;height:100%;opacity:0;cursor:pointer}
 .field .row input[type=text]{margin-top:0;flex:1;min-width:0}
 .field input[type=range]{width:100%}
 .field .lbl{display:flex;align-items:center;gap:6px;justify-content:space-between}
