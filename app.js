@@ -515,6 +515,27 @@ $("#btnNew").onclick = () => {
   state = fresh(); selItem = null; renderAll(); save();
 };
 addEventListener("resize", fitCanvas);
+
+(function sideResizer() {
+  const bar = $("#resizer"), MIN = 260, root = document.documentElement;
+  const clampW = w => Math.max(MIN, Math.min(w, innerWidth - 320));
+  const saved = +localStorage.getItem("gerart-side");
+  if (saved) root.style.setProperty("--side", clampW(saved) + "px");
+  bar.addEventListener("pointerdown", e => {
+    e.preventDefault(); bar.setPointerCapture(e.pointerId); bar.classList.add("drag");
+    document.body.style.userSelect = "none";
+  });
+  bar.addEventListener("pointermove", e => {
+    if (!bar.hasPointerCapture(e.pointerId)) return;
+    root.style.setProperty("--side", clampW(e.clientX) + "px");
+  });
+  const end = e => {
+    bar.classList.remove("drag"); document.body.style.userSelect = "";
+    localStorage.setItem("gerart-side", parseInt(getComputedStyle($("#side")).width));
+  };
+  bar.addEventListener("pointerup", end); bar.addEventListener("pointercancel", end);
+  bar.addEventListener("dblclick", () => { root.style.removeProperty("--side"); localStorage.removeItem("gerart-side"); });
+})();
 if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe($(".canvasWrap"));
 
 (async function init() {
