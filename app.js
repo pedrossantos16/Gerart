@@ -11,8 +11,8 @@ const TEXT_FIELDS = [
   { k: "brand", l: "Marca / loja", t: "text" },
   { k: "name", l: "Nome do produto", t: "text" },
   { k: "desc", l: "Descrição", t: "area" },
-  { k: "oldPrice", l: "Preço antigo (opcional)", t: "text" },
-  { k: "price", l: "Preço", t: "text" },
+  { k: "oldPrice", l: "Preço antigo (opcional)", t: "money" },
+  { k: "price", l: "Preço", t: "money" },
   { k: "cta", l: "Chamada (botão)", t: "text" },
   { k: "link", l: "Link (vira QR code no canto inferior direito)", t: "link" },
 ];
@@ -244,17 +244,14 @@ function paint(ctx, fk, overlay) {
     top += 90;
   }
   const link = String(v("link") || "").trim(), qr = link ? qrMatrix(link) : null;
-  const QR = 170, rowH = qr ? QR : 110;
-  if (qr) drawQr(ctx, qr, W - m - QR, bottom - QR, QR);
   if (v("cta")) {
     ctx.font = `700 46px "${font}"`;
-    const left = m, right = qr ? W - m - QR - 30 : W - m, availW = right - left;
-    const bw = Math.min(availW, ctx.measureText(v("cta")).width + 140), bh = 110;
-    const bx = align === "left" ? left : align === "right" ? right - bw : left + (availW - bw) / 2, by = bottom - rowH / 2 - bh / 2;
+    const bw = Math.min(maxW, ctx.measureText(v("cta")).width + 140), bh = 110;
+    const bx = align === "left" ? m : align === "right" ? W - m - bw : (W - bw) / 2, by = bottom - bh;
     ctx.fillStyle = v("accent"); ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 55); ctx.fill();
     ctx.fillStyle = v("ctaText"); ctx.textAlign = "center"; ctx.fillText(v("cta"), bx + bw / 2, by + bh / 2 + 16); ctx.textAlign = align;
+    bottom = by - 40;
   }
-  if (v("cta") || qr) bottom -= rowH + 40;
   // blocos de texto
   const ns = v("nameSize"), ds = v("descSize"), ps = v("priceSize");
   ctx.font = `800 ${ns}px "${font}"`; const nameL = v("name") ? wrap(ctx, v("name"), maxW) : [];
@@ -267,7 +264,7 @@ function paint(ctx, fk, overlay) {
   const nameH = nameL.length * ns * 1.1, descH = descL.length * ds * 1.35;
   const textH = nameH + (nameH && descH ? 20 : 0) + descH + extraH;
   const hasPrice = !!v("price"), oldS = ps * 0.38;
-  const priceH = hasPrice ? ps * 1.05 + (v("oldPrice") ? oldS * 1.3 : 0) : 0;
+  const priceH = hasPrice ? ps * 1.05 : 0;
   const lowerH = textH + (textH && priceH ? 30 : 0) + priceH;
 
   const imgH = Math.max(200, bottom - top - lowerH - 40);
@@ -290,6 +287,7 @@ function paint(ctx, fk, overlay) {
   }
 
   drawItems("front");
+  if (qr) { const QR = 150, mg = 36; drawQr(ctx, qr, W - mg - QR, H - mg - QR, QR); }
 
   ctx.textAlign = align; ctx.fillStyle = v("textColor");
   let y = textTop;
@@ -306,14 +304,29 @@ function paint(ctx, fk, overlay) {
   ctx.fillStyle = v("textColor");
   if (textH && priceH) y += 30;
   if (hasPrice) {
-    if (v("oldPrice")) {
-      ctx.font = `400 ${oldS}px "${font}"`; ctx.fillStyle = v("textColor"); ctx.globalAlpha = 0.75;
-      y += oldS * 1.3; ctx.fillText(v("oldPrice"), ax, y - oldS * 0.3);
-      const tw = ctx.measureText(v("oldPrice")).width, lx = align === "left" ? ax : align === "right" ? ax - tw : ax - tw / 2;
-      ctx.fillRect(lx, y - oldS * 0.3 - oldS * 0.3, tw, 4); ctx.globalAlpha = 1;
+    const old = v("oldPrice"), gap = 28;
+    ctx.font = `800 ${ps}px "${font}"`;
+    const pw = ctx.measureText(v("price")).width;
+    let os = oldS;
+    if (old) {
+      ctx.font = `400 ${os}px "${font}"`;
+      const room = maxW - pw - gap, ow = ctx.measureText(old).width;
+      if (ow > room) os = Math.max(14, os * Math.max(room, 1) / ow);
+      ctx.font = `400 ${os}px "${font}"`;
+    }
+    const ow = old ? ctx.measureText(old).width : 0, total = pw + (old ? ow + gap : 0);
+    const sx = align === "left" ? ax : align === "right" ? ax - total : ax - total / 2;
+    y += ps * 1.05;
+    const base = y - ps * 0.15;
+    ctx.textAlign = "left";
+    if (old) {
+      ctx.font = `400 ${os}px "${font}"`; ctx.fillStyle = v("textColor"); ctx.globalAlpha = 0.75;
+      ctx.fillText(old, sx, base);
+      ctx.fillRect(sx, base - os * 0.32, ow, Math.max(3, os * 0.07)); ctx.globalAlpha = 1;
     }
     ctx.font = `800 ${ps}px "${font}"`; ctx.fillStyle = v("accent");
-    y += ps * 1.05; ctx.fillText(v("price"), ax, y - ps * 0.15);
+    ctx.fillText(v("price"), sx + (old ? ow + gap : 0), base);
+    ctx.textAlign = align;
   }
 
   if (overlay) {
@@ -342,6 +355,7 @@ function buildFields(host, list) {
     const d = document.createElement("div"); d.className = "field"; d.dataset.k = f.k;
     let ctl;
     if (f.t === "area") ctl = '<textarea></textarea>';
+    else if (f.t === "money") ctl = '<input type="text" inputmode="numeric" placeholder="R$ 0,00" autocomplete="off">';
     else if (f.t === "link") ctl = '<div class="row"><input type="text" placeholder="https://seusite.com/produto" inputmode="url"><button type="button" class="copy small">Copiar</button></div>';
     else if (f.t === "select") ctl = `<select>${f.o.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`;
     else if (f.t === "range") ctl = `<input type="range" min="${f.min}" max="${f.max}" step="${f.step}">`;
@@ -350,6 +364,10 @@ function buildFields(host, list) {
     d.innerHTML = `<div class="lbl"><span>${f.l}</span><button class="ov" title="Voltar ao padrão (todos)"></button></div>${ctl}`;
     const el = d.querySelector("textarea,select,input");
     const on = () => {
+      if (f.t === "money") {
+        el.value = formatMoney(el.value);
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
       const val = f.t === "check" ? el.checked : f.t === "range" ? +el.value : el.value;
       setVal(f.k, val);
     };
@@ -363,6 +381,13 @@ function buildFields(host, list) {
     };
     host.appendChild(d);
   }
+}
+function formatMoney(raw) {
+  const digits = String(raw).replace(/\D/g, "").replace(/^0+/, "").slice(0, 12);
+  if (!digits) return "";
+  const cents = digits.padStart(3, "0");
+  const int = cents.slice(0, -2).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `R$ ${int},${cents.slice(-2)}`;
 }
 function setVal(k, val) {
   if (state.scope === "this") cur().over[k] = val;
