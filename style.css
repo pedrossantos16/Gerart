@@ -25,7 +25,11 @@ small{color:#8d91a5;font-size:11.5px;display:block;margin:4px 0}
 .field input[type=text],.field textarea,.field select,.field input[type=number]{width:100%;margin-top:3px;background:#12131a;color:#fff;border:1px solid #33374a;border-radius:5px;padding:6px}
 .field textarea{min-height:60px;resize:vertical}
 .field input[type=color]{width:100%;height:30px;margin-top:3px;border:1px solid #33374a;background:#12131a;padding:2px}
+.thumb .bgbtn.thumbbg{position:absolute;left:0;right:0;bottom:0;border-radius:0;font-size:10px;padding:3px 2px;background:#000b;line-height:1.1}
+.bgbtn.wide{width:100%;margin:6px 0 4px;background:#2d3040}
+.bgbtn:disabled{opacity:.6;cursor:wait}
 .field input[type=file]{display:block;margin-top:14px}
+.field .row input[type=text]{margin-top:0;flex:1;min-width:0}
 .field input[type=range]{width:100%}
 .field .lbl{display:flex;align-items:center;gap:6px;justify-content:space-between}
 .field .ov{display:none;width:9px;height:9px;border-radius:50%;background:#e1306c;border:0;padding:0;cursor:pointer}

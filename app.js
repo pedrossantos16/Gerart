@@ -14,6 +14,7 @@ const TEXT_FIELDS = [
   { k: "oldPrice", l: "Preço antigo (opcional)", t: "text" },
   { k: "price", l: "Preço", t: "text" },
   { k: "cta", l: "Chamada (botão)", t: "text" },
+  { k: "link", l: "Link (vira QR code no canto inferior direito)", t: "link" },
 ];
 const STYLE_FIELDS = [
   { k: "font", l: "Fonte", t: "select", o: FONTS.map(f => [f, f]) },
@@ -33,7 +34,7 @@ const STYLE_FIELDS = [
 
 const DEFAULT_SHARED = {
   brand: "MINHA LOJA", name: "Nome do produto", desc: "Uma descrição curta e persuasiva do seu produto.",
-  oldPrice: "", price: "R$ 99,90", cta: "Compre agora", productImg: null,
+  oldPrice: "", price: "R$ 99,90", cta: "Compre agora", link: "", productImg: null,
   font: "Segoe UI", stops: [{ c: "#1b1464" }, { c: "#e1306c" }], extras: [], bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
   align: "center", nameSize: 84, descSize: 38, priceSize: 130, imgPos: "top", imgScale: 1, imgY: 0, shadow: true,
 };
@@ -103,13 +104,50 @@ const imgOf = id => { if (!id) return null; if (!imgCache.has(id)) loadImg(id); 
 async function addFiles(files) {
   const added = [];
   for (const f of files) {
-    const rec = { id: crypto.randomUUID(), name: f.name, blob: f };
-    await idbPut(rec);
+    const rec = { id: crypto.randomUUID(), name: f.name, blob: f, orig: null, noBg: false };
+    await idbPut({ id: rec.id, name: rec.name, blob: rec.blob, orig: null, noBg: false });
     rec.url = URL.createObjectURL(f);
     library.push(rec); added.push(rec);
   }
   renderLibrary();
   return added;
+}
+
+let bgLib;
+async function toggleBg(rec) {
+  if (rec.busy) return;
+  rec.busy = true; refreshBgUi();
+  try {
+    if (rec.noBg) { rec.blob = rec.orig; rec.noBg = false; }
+    else {
+      bgLib = bgLib || import("https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm");
+      const { removeBackground } = await bgLib;
+      const src = rec.orig || rec.blob;
+      const out = await removeBackground(src, { output: { format: "image/png" } });
+      rec.orig = src; rec.blob = out; rec.noBg = true;
+    }
+    URL.revokeObjectURL(rec.url); rec.url = URL.createObjectURL(rec.blob);
+    imgCache.delete(rec.id);
+    await idbPut({ id: rec.id, name: rec.name, blob: rec.blob, orig: rec.orig, noBg: rec.noBg });
+  } catch (e) {
+    console.error(e); bgLib = null;
+    alert("Não foi possível remover o fundo. Verifique a conexão com a internet (o modelo é baixado na primeira vez) e tente novamente.");
+  } finally { rec.busy = false; refreshBgUi(); scheduleDraw(); }
+}
+function bgButton(rec, cls) {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "bgbtn " + (cls || "");
+  b.disabled = !!rec.busy;
+  b.textContent = rec.busy ? "Processando..." : rec.noBg ? "Restaurar fundo" : "Remover fundo";
+  b.title = rec.noBg ? "Voltar à imagem original" : "Remover o fundo desta imagem";
+  b.onclick = e => { e.stopPropagation(); toggleBg(rec); };
+  return b;
+}
+function refreshBgUi() { renderLibrary(); renderItems(); renderProductBg(); }
+function renderProductBg() {
+  const host = $("#productBg"); host.innerHTML = "";
+  const rec = library.find(l => l.id === state.shared.productImg);
+  if (rec) host.appendChild(bgButton(rec, "wide"));
 }
 
 /* ---------- Renderização ---------- */
@@ -141,6 +179,28 @@ function draw(opts) {
 }
 let raf;
 function scheduleDraw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint($("#cv").getContext("2d"), state.active, true); }); }
+
+const qrCache = new Map();
+function qrMatrix(text) {
+  if (qrCache.has(text)) return qrCache.get(text);
+  let m = null;
+  try {
+    const q = qrcode(0, "M"); q.addData(text); q.make();
+    const n = q.getModuleCount(); m = [];
+    for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(q.isDark(r, c)); m.push(row); }
+  } catch { m = null; }
+  qrCache.set(text, m);
+  return m;
+}
+function drawQr(ctx, m, x, y, size) {
+  const pad = 14, n = m.length, cell = (size - 2 * pad) / n;
+  ctx.save();
+  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect(x, y, size, size, 16); ctx.fill();
+  ctx.fillStyle = "#000";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++)
+    if (m[r][c]) ctx.fillRect(x + pad + c * cell, y + pad + r * cell, Math.ceil(cell), Math.ceil(cell));
+  ctx.restore();
+}
 
 function paint(ctx, fk, overlay) {
   const F = FORMATS[fk], W = F.w, H = F.h, fs = state.formats[fk], v = k => get(fk, k);
@@ -183,14 +243,18 @@ function paint(ctx, fk, overlay) {
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
     top += 90;
   }
+  const link = String(v("link") || "").trim(), qr = link ? qrMatrix(link) : null;
+  const QR = 170, rowH = qr ? QR : 110;
+  if (qr) drawQr(ctx, qr, W - m - QR, bottom - QR, QR);
   if (v("cta")) {
     ctx.font = `700 46px "${font}"`;
-    const bw = Math.min(maxW, ctx.measureText(v("cta")).width + 140), bh = 110;
-    const bx = align === "left" ? m : align === "right" ? W - m - bw : (W - bw) / 2, by = bottom - bh;
+    const left = m, right = qr ? W - m - QR - 30 : W - m, availW = right - left;
+    const bw = Math.min(availW, ctx.measureText(v("cta")).width + 140), bh = 110;
+    const bx = align === "left" ? left : align === "right" ? right - bw : left + (availW - bw) / 2, by = bottom - rowH / 2 - bh / 2;
     ctx.fillStyle = v("accent"); ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 55); ctx.fill();
     ctx.fillStyle = v("ctaText"); ctx.textAlign = "center"; ctx.fillText(v("cta"), bx + bw / 2, by + bh / 2 + 16); ctx.textAlign = align;
-    bottom = by - 40;
   }
+  if (v("cta") || qr) bottom -= rowH + 40;
   // blocos de texto
   const ns = v("nameSize"), ds = v("descSize"), ps = v("priceSize");
   ctx.font = `800 ${ns}px "${font}"`; const nameL = v("name") ? wrap(ctx, v("name"), maxW) : [];
@@ -278,6 +342,7 @@ function buildFields(host, list) {
     const d = document.createElement("div"); d.className = "field"; d.dataset.k = f.k;
     let ctl;
     if (f.t === "area") ctl = '<textarea></textarea>';
+    else if (f.t === "link") ctl = '<div class="row"><input type="text" placeholder="https://seusite.com/produto" inputmode="url"><button type="button" class="copy small">Copiar</button></div>';
     else if (f.t === "select") ctl = `<select>${f.o.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`;
     else if (f.t === "range") ctl = `<input type="range" min="${f.min}" max="${f.max}" step="${f.step}">`;
     else if (f.t === "check") ctl = '<input type="checkbox">';
@@ -290,6 +355,12 @@ function buildFields(host, list) {
     };
     el.addEventListener("input", on); el.addEventListener("change", on);
     d.querySelector(".ov").onclick = e => { e.preventDefault(); delete cur().over[f.k]; syncFields(); scheduleDraw(); save(); };
+    const copy = d.querySelector(".copy");
+    if (copy) copy.onclick = async () => {
+      const text = el.value.trim(); if (!text) { el.focus(); return; }
+      try { await navigator.clipboard.writeText(text); } catch { el.select(); document.execCommand("copy"); }
+      copy.textContent = "Copiado!"; setTimeout(() => copy.textContent = "Copiar", 1500);
+    };
     host.appendChild(d);
   }
 }
@@ -366,6 +437,7 @@ function renderLibrary() {
     if (rec.id === state.shared.productImg) continue;
     const t = document.createElement("div"); t.className = "thumb"; t.title = rec.name;
     t.innerHTML = `<img src="${rec.url}"><button class="x" title="Excluir da biblioteca">×</button>`;
+    t.appendChild(bgButton(rec, "thumbbg"));
     t.onclick = () => addItem(rec.id);
     t.querySelector(".x").onclick = async e => {
       e.stopPropagation();
@@ -404,6 +476,7 @@ function renderItems() {
         <label style="grid-column:span 2">Girar<input type="range" data-p="rot" min="-180" max="180" step="1" value="${it.rot || 0}"></label>
         <label><input type="checkbox" data-p="flip"${it.flip ? " checked" : ""} style="width:auto"> Espelhar</label>
       </div>`;
+    d.querySelector(".head").insertBefore(rec ? bgButton(rec, "small") : document.createTextNode(""), d.querySelector(".del"));
     d.onclick = () => { if (selItem !== it.id) { selItem = it.id; renderItems(); scheduleDraw(); } };
     d.querySelector(".del").onclick = e => { e.stopPropagation(); fs.items = fs.items.filter(i => i !== it); renderItems(); scheduleDraw(); save(); };
     d.querySelectorAll("[data-p]").forEach(el => el.addEventListener("input", () => {
@@ -434,7 +507,7 @@ function renderAll() {
   $("#info").textContent = `${F.w}×${F.h}px`;
   $("#gCols").value = cur().cols; $("#gRows").value = cur().rows;
   document.querySelector(`input[name=scope][value=${state.scope}]`).checked = true;
-  renderTabs(); syncFields(); renderLibrary(); renderItems(); scheduleDraw();
+  renderTabs(); syncFields(); renderLibrary(); renderProductBg(); renderItems(); scheduleDraw();
 }
 
 /* ---------- Exportação ---------- */
@@ -476,9 +549,9 @@ function makeZip(files) { // files: [{name, data:Uint8Array}] sem compressão
 $("#productFile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
   const [rec] = await addFiles([f]); state.shared.productImg = rec.id;
-  await loadImg(rec.id); renderLibrary(); scheduleDraw(); save(); e.target.value = "";
+  await loadImg(rec.id); renderLibrary(); renderProductBg(); scheduleDraw(); save(); e.target.value = "";
 };
-$("#productClear").onclick = () => { state.shared.productImg = null; renderLibrary(); scheduleDraw(); save(); };
+$("#productClear").onclick = () => { state.shared.productImg = null; renderLibrary(); renderProductBg(); scheduleDraw(); save(); };
 $("#libFile").onchange = async e => { await addFiles([...e.target.files]); e.target.value = ""; };
 document.querySelectorAll("input[name=scope]").forEach(r => r.onchange = () => { state.scope = r.value; save(); });
 $("#gCols").oninput = e => setGrid("cols", +e.target.value);
