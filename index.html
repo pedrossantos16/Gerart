@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Gerart – Gerador de anúncios</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -71,6 +72,13 @@
   <section id="stage">
     <nav id="tabs"></nav>
     <div class="canvasWrap"><canvas id="cv"></canvas></div>
+    <div id="alignBar" class="off">
+      <select id="alignSel"></select>
+      <button type="button" data-a="left" title="Esquerda" aria-label="Esquerda"><svg viewBox="0 0 24 18" width="22" height="16"><path d="M1 2h16M1 6.5h22M1 11h16M1 15.5h22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <button type="button" data-a="center" title="Centro" aria-label="Centro"><svg viewBox="0 0 24 18" width="22" height="16"><path d="M4 2h16M1 6.5h22M4 11h16M1 15.5h22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <button type="button" data-a="right" title="Direita" aria-label="Direita"><svg viewBox="0 0 24 18" width="22" height="16"><path d="M7 2h16M1 6.5h22M7 11h16M1 15.5h22" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
+      <button type="button" data-a="" title="Seguir o alinhamento geral" aria-label="Padrão">↺</button>
+    </div>
     <div id="info"></div>
   </section>
 </main>

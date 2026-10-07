@@ -35,13 +35,13 @@ const STYLE_FIELDS = [
 const DEFAULT_SHARED = {
   brand: "MINHA LOJA", name: "Nome do produto", desc: "Uma descrição curta e persuasiva do seu produto.",
   oldPrice: "", price: "R$ 99,90", cta: "Compre agora", link: "", productImg: null,
-  font: "Segoe UI", stops: [{ c: "#1b1464" }, { c: "#e1306c" }], extras: [], bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
+  font: "Segoe UI", stops: [{ c: "#1b1464" }, { c: "#e1306c" }], extras: [], tAlign: {}, bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
   align: "center", nameSize: 84, descSize: 38, priceSize: 130, imgPos: "top", imgScale: 1, imgY: 0, shadow: true,
 };
 
 const $ = s => document.querySelector(s);
 let state = load() || fresh();
-let selItem = null;
+let selItem = null, selText = null, hits = [];
 const view = { grid: true, safe: false };
 
 function fresh() {
@@ -177,8 +177,35 @@ function draw(opts) {
   if (opts === undefined || opts instanceof Event) { scheduleDraw(); return; }
   paint(opts.ctx, opts.key, opts.overlay);
 }
+let barSig = "";
+function getAl(key) {
+  if (key[0] === "x") return (get(state.active, "extras")[+key.slice(1)] || {}).align || "";
+  return (get(state.active, "tAlign") || {})[key] || "";
+}
+function setAl(key, val) {
+  if (key[0] === "x") { const a = clone(get(state.active, "extras")); if (!a[+key.slice(1)]) return; if (val) a[+key.slice(1)].align = val; else delete a[+key.slice(1)].align; setVal("extras", a); }
+  else { const t = clone(get(state.active, "tAlign") || {}); if (val) t[key] = val; else delete t[key]; setVal("tAlign", t); }
+}
+function updateBar() {
+  const sel = $("#alignSel"), bar = $("#alignBar");
+  const sig = hits.map(h => h.key + h.label).join("|");
+  if (sig !== barSig) {
+    barSig = sig;
+    let n = 0;
+    sel.innerHTML = '<option value="">Escolha um elemento…</option>' + hits.map(h => `<option value="${h.key}">${h.key[0] === "x" ? "Texto extra " + (++n) : h.label}</option>`).join("");
+  }
+  if (selText && !hits.some(h => h.key === selText)) selText = null;
+  sel.value = selText || "";
+  const cur_ = selText ? getAl(selText) : "";
+  bar.querySelectorAll("button").forEach(b => b.classList.toggle("on", !!selText && b.dataset.a === cur_));
+  bar.classList.toggle("off", !selText);
+}
+function initAlignBar() {
+  $("#alignSel").onchange = e => { selText = e.target.value || null; scheduleDraw(); };
+  $("#alignBar").querySelectorAll("button").forEach(b => b.onclick = () => { if (selText) { setAl(selText, b.dataset.a); } });
+}
 let raf;
-function scheduleDraw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint($("#cv").getContext("2d"), state.active, true); }); }
+function scheduleDraw() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; paint($("#cv").getContext("2d"), state.active, true); updateBar(); }); }
 
 const qrCache = new Map();
 function qrMatrix(text) {
@@ -231,15 +258,25 @@ function paint(ctx, fk, overlay) {
   drawItems("back");
 
   // conteúdo
-  const m = 80, maxW = W - 2 * m, align = v("align");
-  const ax = align === "left" ? m : align === "right" ? W - m : W / 2;
+  const m = 80, maxW = W - 2 * m, align = v("align"), tAl = v("tAlign") || {};
+  const al = k => tAl[k] || align;
+  const axOf = a => a === "left" ? m : a === "right" ? W - m : W / 2;
+  const ax = axOf(align);
+  const hit = (key, label, a, w, y0, h) => {
+    if (!overlay) return;
+    const x = a === "left" ? m : a === "right" ? W - m - w : (W - w) / 2;
+    hits.push({ key, label, x, y: y0, w, h });
+  };
+  if (overlay) hits = [];
   ctx.textAlign = align; ctx.textBaseline = "alphabetic";
   let top = F.safeT, bottom = H - F.safeB;
 
   if (v("brand")) {
     ctx.font = `700 40px "${font}"`; ctx.fillStyle = v("textColor");
     if ("letterSpacing" in ctx) ctx.letterSpacing = "6px";
-    ctx.fillText(v("brand").toUpperCase(), ax, top + 40);
+    const a = al("brand"), bt = v("brand").toUpperCase();
+    ctx.textAlign = a; ctx.fillText(bt, axOf(a), top + 40);
+    hit("brand", "Marca / loja", a, Math.min(maxW, ctx.measureText(bt).width), top, 50);
     if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
     top += 90;
   }
@@ -247,18 +284,19 @@ function paint(ctx, fk, overlay) {
   if (v("cta")) {
     ctx.font = `700 46px "${font}"`;
     const bw = Math.min(maxW, ctx.measureText(v("cta")).width + 140), bh = 110;
-    const bx = align === "left" ? m : align === "right" ? W - m - bw : (W - bw) / 2, by = bottom - bh;
+    const ca = al("cta"), bx = ca === "left" ? m : ca === "right" ? W - m - bw : (W - bw) / 2, by = bottom - bh;
     ctx.fillStyle = v("accent"); ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 55); ctx.fill();
     ctx.fillStyle = v("ctaText"); ctx.textAlign = "center"; ctx.fillText(v("cta"), bx + bw / 2, by + bh / 2 + 16); ctx.textAlign = align;
+    hit("cta", "Chamada (botão)", ca, bw, by, bh);
     bottom = by - 40;
   }
   // blocos de texto
   const ns = v("nameSize"), ds = v("descSize"), ps = v("priceSize");
   ctx.font = `800 ${ns}px "${font}"`; const nameL = v("name") ? wrap(ctx, v("name"), maxW) : [];
   ctx.font = `400 ${ds}px "${font}"`; const descL = v("desc") ? wrap(ctx, v("desc"), maxW) : [];
-  const extras = (v("extras") || []).filter(e => e.text).map(e => {
+  const extras = (v("extras") || []).map((e, i) => ({ e, i })).filter(o => o.e.text).map(({ e, i }) => {
     ctx.font = `600 ${e.size}px "${font}"`;
-    return { e, lines: wrap(ctx, e.text, maxW) };
+    return { e, i, lines: wrap(ctx, e.text, maxW) };
   });
   const extraH = extras.reduce((s, x) => s + 16 + x.lines.length * x.e.size * 1.3, 0);
   const nameH = nameL.length * ns * 1.1, descH = descL.length * ds * 1.35;
@@ -289,17 +327,23 @@ function paint(ctx, fk, overlay) {
   drawItems("front");
   if (qr) { const QR = 150, mg = 36; drawQr(ctx, qr, W - mg - QR, H - mg - QR, QR); }
 
-  ctx.textAlign = align; ctx.fillStyle = v("textColor");
+  ctx.fillStyle = v("textColor");
   let y = textTop;
-  ctx.font = `800 ${ns}px "${font}"`;
-  for (const l of nameL) { y += ns * 1.1; ctx.fillText(l, ax, y - ns * 0.2); }
+  const lw = lines => Math.min(maxW, Math.max(0, ...lines.map(l => ctx.measureText(l).width)));
+  const na = al("name"), da = al("desc");
+  ctx.font = `800 ${ns}px "${font}"`; ctx.textAlign = na; const ny = y;
+  for (const l of nameL) { y += ns * 1.1; ctx.fillText(l, axOf(na), y - ns * 0.2); }
+  if (nameL.length) hit("name", "Nome do produto", na, lw(nameL), ny, y - ny);
   if (nameH && descH) y += 20;
-  ctx.font = `400 ${ds}px "${font}"`; ctx.globalAlpha = 0.9;
-  for (const l of descL) { y += ds * 1.35; ctx.fillText(l, ax, y - ds * 0.3); }
+  ctx.font = `400 ${ds}px "${font}"`; ctx.globalAlpha = 0.9; ctx.textAlign = da; const dy0 = y;
+  for (const l of descL) { y += ds * 1.35; ctx.fillText(l, axOf(da), y - ds * 0.3); }
   ctx.globalAlpha = 1;
+  if (descL.length) hit("desc", "Descrição", da, lw(descL), dy0, y - dy0);
   for (const x of extras) {
-    y += 16; ctx.font = `600 ${x.e.size}px "${font}"`; ctx.fillStyle = x.e.color;
-    for (const l of x.lines) { y += x.e.size * 1.3; ctx.fillText(l, ax, y - x.e.size * 0.3); }
+    const xa = x.e.align || align;
+    y += 16; ctx.font = `600 ${x.e.size}px "${font}"`; ctx.fillStyle = x.e.color; ctx.textAlign = xa; const ey = y;
+    for (const l of x.lines) { y += x.e.size * 1.3; ctx.fillText(l, axOf(xa), y - x.e.size * 0.3); }
+    hit("x" + x.i, "Texto extra", xa, lw(x.lines), ey, y - ey);
   }
   ctx.fillStyle = v("textColor");
   if (textH && priceH) y += 30;
@@ -315,7 +359,9 @@ function paint(ctx, fk, overlay) {
       ctx.font = `400 ${os}px "${font}"`;
     }
     const ow = old ? ctx.measureText(old).width : 0, total = pw + (old ? ow + gap : 0);
-    const sx = align === "left" ? ax : align === "right" ? ax - total : ax - total / 2;
+    const pa = al("price"), pax = axOf(pa);
+    const sx = pa === "left" ? pax : pa === "right" ? pax - total : pax - total / 2;
+    hit("price", "Preço", pa, Math.min(maxW, total), y, ps * 1.05);
     y += ps * 1.05;
     const base = y - ps * 0.15;
     ctx.textAlign = "left";
@@ -330,6 +376,8 @@ function paint(ctx, fk, overlay) {
   }
 
   if (overlay) {
+    const sh = hits.find(h => h.key === selText);
+    if (sh) { ctx.save(); ctx.strokeStyle = "#e1306c"; ctx.lineWidth = 4; ctx.setLineDash([14, 8]); ctx.strokeRect(sh.x - 10, sh.y - 6, sh.w + 20, sh.h + 12); ctx.restore(); }
     if (view.safe) {
       ctx.fillStyle = "rgba(255,0,0,.18)";
       ctx.fillRect(0, 0, W, F.safeT); ctx.fillRect(0, H - F.safeB, W, F.safeB);
@@ -593,8 +641,13 @@ function setGrid(p, n) {
 $("#showGrid").onchange = e => { view.grid = e.target.checked; scheduleDraw(); };
 $("#showSafe").onchange = e => { view.safe = e.target.checked; scheduleDraw(); };
 $("#cv").onclick = e => {
-  const it = cur().items.find(i => i.id === selItem); if (!it) return;
   const r = e.target.getBoundingClientRect(), fs = cur();
+  if (!selItem) {
+    const px = (e.clientX - r.left) / r.width * FORMATS[state.active].w, py = (e.clientY - r.top) / r.height * FORMATS[state.active].h;
+    const h = hits.filter(h => px >= h.x - 10 && px <= h.x + h.w + 10 && py >= h.y - 6 && py <= h.y + h.h + 6).pop();
+    selText = h ? h.key : null; scheduleDraw(); return;
+  }
+  const it = fs.items.find(i => i.id === selItem); if (!it) return;
   it.col = Math.min(fs.cols - it.cs + 1, Math.floor((e.clientX - r.left) / r.width * fs.cols) + 1);
   it.row = Math.min(fs.rows - it.rs + 1, Math.floor((e.clientY - r.top) / r.height * fs.rows) + 1);
   renderItems(); scheduleDraw(); save();
@@ -637,7 +690,7 @@ addEventListener("resize", fitCanvas);
 if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe($(".canvasWrap"));
 
 (async function init() {
-  buildFields($("#fieldsText"), TEXT_FIELDS); buildFields($("#fieldsStyle"), STYLE_FIELDS);
+  initAlignBar(); buildFields($("#fieldsText"), TEXT_FIELDS); buildFields($("#fieldsStyle"), STYLE_FIELDS);
   try {
     library = await idbAll();
     library.forEach(r => r.url = URL.createObjectURL(r.blob));
