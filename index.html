@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gerart – Gerador de anúncios</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Gerart</h1>
+  <span class="sub">Anúncios para Feed (4:5), Stories e Reels (9:16)</span>
+  <div class="spacer"></div>
+  <button id="btnNew" class="ghost">Novo anúncio</button>
+  <button id="btnOne">Baixar este formato</button>
+  <button id="btnZip" class="primary">Baixar pasta (ZIP) com todos</button>
+</header>
+
+<main>
+  <aside id="side">
+    <div class="scope">
+      <strong>Editando:</strong>
+      <label><input type="radio" name="scope" value="all" checked> Todos os formatos</label>
+      <label><input type="radio" name="scope" value="this"> Só o formato atual</label>
+      <small>Campos com <span class="dot"></span> foram personalizados só neste formato (clique no ponto para voltar ao padrão).</small>
+    </div>
+
+    <details open><summary>Produto</summary>
+      <div class="body">
+        <label class="field">Foto do produto
+          <div class="row">
+            <input type="file" id="productFile" accept="image/*">
+            <button id="productClear" class="ghost small">Remover</button>
+          </div>
+        </label>
+        <div id="fieldsText"></div>
+      </div>
+    </details>
+
+    <details open><summary>Estilo</summary>
+      <div class="body" id="fieldsStyle"></div>
+    </details>
+
+    <details open><summary>Detalhes visuais (biblioteca)</summary>
+      <div class="body">
+        <label class="field">Adicionar imagens à biblioteca (PNG com fundo transparente funciona melhor)
+          <input type="file" id="libFile" accept="image/*" multiple>
+        </label>
+        <small>Tudo fica salvo neste navegador e pode ser usado em outros anúncios. Clique numa miniatura para colocá-la no formato atual.</small>
+        <div id="library" class="library"></div>
+      </div>
+    </details>
+
+    <details open><summary>Grade e posicionamento – <span id="fmtName"></span></summary>
+      <div class="body">
+        <div class="row">
+          <label class="field">Colunas <input type="number" id="gCols" min="1" max="24"></label>
+          <label class="field">Linhas <input type="number" id="gRows" min="1" max="24"></label>
+        </div>
+        <label class="check"><input type="checkbox" id="showGrid" checked> Mostrar grade na prévia</label>
+        <label class="check"><input type="checkbox" id="showSafe"> Mostrar zona segura (Stories/Reels)</label>
+        <small>Dica: selecione um detalhe abaixo e clique na prévia para movê-lo para aquela coluna × linha.</small>
+        <div id="items"></div>
+      </div>
+    </details>
+  </aside>
+
+  <section id="stage">
+    <nav id="tabs"></nav>
+    <div class="canvasWrap"><canvas id="cv"></canvas></div>
+    <div id="info"></div>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
