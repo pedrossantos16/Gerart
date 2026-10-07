@@ -22,7 +22,7 @@
       <strong>Editando:</strong>
       <label><input type="radio" name="scope" value="all" checked> Todos os formatos</label>
       <label><input type="radio" name="scope" value="this"> Só o formato atual</label>
-      <small>Campos com <span class="dot"></span> foram personalizados só neste formato (clique no ponto para voltar ao padrão).</small>
+      <small>Escolha o que você quer editar</small>
     </div>
 
     <details open><summary>Produto</summary>
@@ -30,20 +30,21 @@
         <label class="field">Foto do produto
           <div class="row">
             <input type="file" id="productFile" accept="image/*">
-            <button id="productClear" class="ghost small">Remover</button>
+            <button id="productClear" class="x" title="Remover foto">✕</button>
           </div>
         </label>
         <div id="fieldsText"></div>
+        <div id="extrasBox" class="block" data-k="extras"></div>
       </div>
     </details>
 
     <details open><summary>Estilo</summary>
-      <div class="body" id="fieldsStyle"></div>
+      <div class="body"><div id="stopsBox" class="block" data-k="stops"></div><div id="fieldsStyle"></div></div>
     </details>
 
     <details open><summary>Detalhes visuais (biblioteca)</summary>
       <div class="body">
-        <label class="field">Adicionar imagens à biblioteca (PNG com fundo transparente funciona melhor)
+        <label class="field">Adicionar imagens à biblioteca
           <input type="file" id="libFile" accept="image/*" multiple>
         </label>
         <small>Tudo fica salvo neste navegador e pode ser usado em outros anúncios. Clique numa miniatura para colocá-la no formato atual.</small>

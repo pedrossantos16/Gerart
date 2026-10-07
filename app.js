@@ -17,8 +17,6 @@ const TEXT_FIELDS = [
 ];
 const STYLE_FIELDS = [
   { k: "font", l: "Fonte", t: "select", o: FONTS.map(f => [f, f]) },
-  { k: "bg1", l: "Fundo – cor 1", t: "color" },
-  { k: "bg2", l: "Fundo – cor 2", t: "color" },
   { k: "bgAngle", l: "Ângulo do degradê", t: "range", min: 0, max: 360, step: 1 },
   { k: "textColor", l: "Cor do texto", t: "color" },
   { k: "accent", l: "Cor de destaque (preço/botão)", t: "color" },
@@ -36,7 +34,7 @@ const STYLE_FIELDS = [
 const DEFAULT_SHARED = {
   brand: "MINHA LOJA", name: "Nome do produto", desc: "Uma descrição curta e persuasiva do seu produto.",
   oldPrice: "", price: "R$ 99,90", cta: "Compre agora", productImg: null,
-  font: "Segoe UI", bg1: "#1b1464", bg2: "#e1306c", bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
+  font: "Segoe UI", stops: [{ c: "#1b1464" }, { c: "#e1306c" }], extras: [], bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
   align: "center", nameSize: 84, descSize: 38, priceSize: 130, imgPos: "top", imgScale: 1, imgY: 0, shadow: true,
 };
 
@@ -55,7 +53,10 @@ function load() {
     const s = JSON.parse(localStorage.getItem("gerart-state"));
     if (!s) return null;
     s.shared = { ...DEFAULT_SHARED, ...s.shared };
+    const mig = o => { if (!o.stops && (o.bg1 || o.bg2)) o.stops = [{ c: o.bg1 || DEFAULT_SHARED.stops[0].c }, { c: o.bg2 || DEFAULT_SHARED.stops[1].c }]; delete o.bg1; delete o.bg2; };
+    mig(s.shared);
     for (const k in FORMATS) s.formats[k] = { cols: FORMATS[k].cols, rows: FORMATS[k].rows, over: {}, items: [], ...s.formats[k] };
+    for (const k in FORMATS) mig(s.formats[k].over);
     return s;
   } catch { return null; }
 }
@@ -148,7 +149,8 @@ function paint(ctx, fk, overlay) {
 
   const a = v("bgAngle") * Math.PI / 180, dx = Math.sin(a), dy = -Math.cos(a), r = Math.abs(W * dx) / 2 + Math.abs(H * dy) / 2;
   const g = ctx.createLinearGradient(W / 2 - dx * r, H / 2 - dy * r, W / 2 + dx * r, H / 2 + dy * r);
-  g.addColorStop(0, v("bg1")); g.addColorStop(1, v("bg2"));
+  const stops = v("stops");
+  stops.forEach((s, i) => g.addColorStop(stops.length > 1 ? i / (stops.length - 1) : 0, s.c));
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
   const cw = W / fs.cols, ch = H / fs.rows;
@@ -193,8 +195,13 @@ function paint(ctx, fk, overlay) {
   const ns = v("nameSize"), ds = v("descSize"), ps = v("priceSize");
   ctx.font = `800 ${ns}px "${font}"`; const nameL = v("name") ? wrap(ctx, v("name"), maxW) : [];
   ctx.font = `400 ${ds}px "${font}"`; const descL = v("desc") ? wrap(ctx, v("desc"), maxW) : [];
+  const extras = (v("extras") || []).filter(e => e.text).map(e => {
+    ctx.font = `600 ${e.size}px "${font}"`;
+    return { e, lines: wrap(ctx, e.text, maxW) };
+  });
+  const extraH = extras.reduce((s, x) => s + 16 + x.lines.length * x.e.size * 1.3, 0);
   const nameH = nameL.length * ns * 1.1, descH = descL.length * ds * 1.35;
-  const textH = nameH + (nameH && descH ? 20 : 0) + descH;
+  const textH = nameH + (nameH && descH ? 20 : 0) + descH + extraH;
   const hasPrice = !!v("price"), oldS = ps * 0.38;
   const priceH = hasPrice ? ps * 1.05 + (v("oldPrice") ? oldS * 1.3 : 0) : 0;
   const lowerH = textH + (textH && priceH ? 30 : 0) + priceH;
@@ -228,6 +235,11 @@ function paint(ctx, fk, overlay) {
   ctx.font = `400 ${ds}px "${font}"`; ctx.globalAlpha = 0.9;
   for (const l of descL) { y += ds * 1.35; ctx.fillText(l, ax, y - ds * 0.3); }
   ctx.globalAlpha = 1;
+  for (const x of extras) {
+    y += 16; ctx.font = `600 ${x.e.size}px "${font}"`; ctx.fillStyle = x.e.color;
+    for (const l of x.lines) { y += x.e.size * 1.3; ctx.fillText(l, ax, y - x.e.size * 0.3); }
+  }
+  ctx.fillStyle = v("textColor");
   if (textH && priceH) y += 30;
   if (hasPrice) {
     if (v("oldPrice")) {
@@ -274,16 +286,62 @@ function buildFields(host, list) {
     const el = d.querySelector("textarea,select,input");
     const on = () => {
       const val = f.t === "check" ? el.checked : f.t === "range" ? +el.value : el.value;
-      if (state.scope === "this") cur().over[f.k] = val;
-      else { state.shared[f.k] = val; delete cur().over[f.k]; }
-      refreshOverride(); scheduleDraw(); save();
+      setVal(f.k, val);
     };
     el.addEventListener("input", on); el.addEventListener("change", on);
     d.querySelector(".ov").onclick = e => { e.preventDefault(); delete cur().over[f.k]; syncFields(); scheduleDraw(); save(); };
     host.appendChild(d);
   }
 }
+function setVal(k, val) {
+  if (state.scope === "this") cur().over[k] = val;
+  else { state.shared[k] = val; delete cur().over[k]; }
+  refreshOverride(); scheduleDraw(); save();
+}
+const clone = v => JSON.parse(JSON.stringify(v));
+
+function blockHead(title, addTitle) {
+  return `<div class="lbl"><span>${title}</span><span class="row"><button class="ov" title="Voltar ao padrão (todos)"></button><button class="plus" title="${addTitle}">+</button></span></div><div class="list"></div>`;
+}
+function renderStops() {
+  const box = $("#stopsBox"), stops = get(state.active, "stops");
+  box.innerHTML = blockHead("Cores do degradê", "Adicionar cor");
+  const list = box.querySelector(".list");
+  stops.forEach((s, i) => {
+    const r = document.createElement("div"); r.className = "lrow";
+    r.innerHTML = `<input type="color" value="${s.c}"><button class="x" title="Remover cor"${stops.length <= 1 ? " disabled" : ""}>✕</button>`;
+    r.querySelector("input").oninput = e => { const a = clone(get(state.active, "stops")); a[i].c = e.target.value; setVal("stops", a); };
+    r.querySelector(".x").onclick = () => { const a = clone(get(state.active, "stops")); a.splice(i, 1); setVal("stops", a); renderStops(); };
+    list.appendChild(r);
+  });
+  box.querySelector(".plus").onclick = () => {
+    const a = clone(get(state.active, "stops")); a.push({ c: a[a.length - 1].c }); setVal("stops", a); renderStops();
+  };
+  box.querySelector(".ov").onclick = () => { delete cur().over.stops; renderStops(); scheduleDraw(); refreshOverride(); save(); };
+}
+function renderExtras() {
+  const box = $("#extrasBox"), extras = get(state.active, "extras");
+  box.innerHTML = blockHead("Textos extras", "Adicionar campo de texto");
+  const list = box.querySelector(".list");
+  extras.forEach((x, i) => {
+    const r = document.createElement("div"); r.className = "lrow extra";
+    r.innerHTML = `<input type="text" class="t" placeholder="Texto" value=""><input type="number" class="s" min="16" max="200" title="Tamanho" value="${x.size}"><input type="color" class="c" title="Cor" value="${x.color}"><button class="x" title="Remover texto">✕</button>`;
+    r.querySelector(".t").value = x.text;
+    const upd = (p, val) => { const a = clone(get(state.active, "extras")); a[i][p] = val; setVal("extras", a); };
+    r.querySelector(".t").oninput = e => upd("text", e.target.value);
+    r.querySelector(".s").oninput = e => { const n = +e.target.value; if (n >= 16 && n <= 200) upd("size", n); };
+    r.querySelector(".c").oninput = e => upd("color", e.target.value);
+    r.querySelector(".x").onclick = () => { const a = clone(get(state.active, "extras")); a.splice(i, 1); setVal("extras", a); renderExtras(); };
+    list.appendChild(r);
+  });
+  box.querySelector(".plus").onclick = () => {
+    const a = clone(get(state.active, "extras")); a.push({ text: "Novo texto", size: 44, color: get(state.active, "textColor") });
+    setVal("extras", a); renderExtras();
+  };
+  box.querySelector(".ov").onclick = () => { delete cur().over.extras; renderExtras(); scheduleDraw(); refreshOverride(); save(); };
+}
 function syncFields() {
+  renderStops(); renderExtras();
   document.querySelectorAll(".field[data-k]").forEach(d => {
     const el = d.querySelector("textarea,select,input"), val = get(state.active, d.dataset.k);
     if (el.type === "checkbox") el.checked = !!val; else el.value = val;
@@ -291,7 +349,7 @@ function syncFields() {
   refreshOverride();
 }
 function refreshOverride() {
-  document.querySelectorAll(".field[data-k]").forEach(d => d.classList.toggle("over", d.dataset.k in cur().over));
+  document.querySelectorAll(".field[data-k],.block[data-k]").forEach(d => d.classList.toggle("over", d.dataset.k in cur().over));
 }
 
 function renderTabs() {
@@ -329,7 +387,7 @@ function renderItems() {
   for (const it of fs.items) {
     const rec = library.find(l => l.id === it.imgId);
     const d = document.createElement("div"); d.className = "item" + (it.id === selItem ? " sel" : "");
-    d.innerHTML = `<div class="head"><img src="${rec ? rec.url : ""}"><strong style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec ? rec.name : "(removida)"}</strong><button class="small ghost del">Remover</button></div>
+    d.innerHTML = `<div class="head"><img src="${rec ? rec.url : ""}"><strong style="flex:1;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec ? rec.name : "(removida)"}</strong><button class="x del" title="Remover">✕</button></div>
       <div class="grid">
         <label>Coluna<input type="number" data-p="col" min="1" max="${fs.cols}" value="${it.col}"></label>
         <label>Linha<input type="number" data-p="row" min="1" max="${fs.rows}" value="${it.row}"></label>
@@ -456,7 +514,8 @@ $("#btnNew").onclick = () => {
   if (!confirm("Começar um novo anúncio? A biblioteca de detalhes visuais será mantida.")) return;
   state = fresh(); selItem = null; renderAll(); save();
 };
-addEventListener("resize", () => { fitCanvas(); });
+addEventListener("resize", fitCanvas);
+if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe($(".canvasWrap"));
 
 (async function init() {
   buildFields($("#fieldsText"), TEXT_FIELDS); buildFields($("#fieldsStyle"), STYLE_FIELDS);
