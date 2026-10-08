@@ -29,6 +29,7 @@ const STYLE_FIELDS = [
   { k: "imgPos", l: "Foto do produto", t: "select", o: [["top", "Acima do texto"], ["bottom", "Abaixo do texto"]] },
   { k: "imgScale", l: "Escala da foto", t: "range", min: 0.3, max: 1.8, step: 0.01 },
   { k: "imgY", l: "Deslocar foto (vertical)", t: "range", min: -500, max: 500, step: 1 },
+  { k: "imgX", l: "Deslocar foto (horizontal)", t: "range", min: -540, max: 540, step: 1 },
   { k: "shadow", l: "Sombra na foto", t: "check" },
 ];
 
@@ -36,7 +37,7 @@ const DEFAULT_SHARED = {
   brand: "MINHA LOJA", name: "Nome do produto", desc: "Uma descrição curta e persuasiva do seu produto.",
   oldPrice: "", price: "R$ 99,90", cta: "Compre agora", link: "", productImg: null,
   font: "Segoe UI", stops: [{ c: "#1b1464" }, { c: "#e1306c" }], extras: [], tAlign: {}, bgAngle: 160, textColor: "#ffffff", accent: "#ffd400", ctaText: "#1a1a1a",
-  align: "center", nameSize: 84, descSize: 38, priceSize: 130, imgPos: "top", imgScale: 1, imgY: 0, shadow: true,
+  align: "center", nameSize: 84, descSize: 38, priceSize: 130, imgPos: "top", imgScale: 1, imgY: 0, imgX: 0, shadow: true,
 };
 
 const $ = s => document.querySelector(s);
@@ -92,15 +93,17 @@ const get = (fk, k) => (k in state.formats[fk].over ? state.formats[fk].over[k] 
 let dbp;
 function db() {
   return dbp || (dbp = new Promise((res, rej) => {
-    const r = indexedDB.open("gerart", 1);
-    r.onupgradeneeded = () => r.result.createObjectStore("images", { keyPath: "id" });
+    const r = indexedDB.open("gerart", 2);
+    r.onupgradeneeded = () => {
+      for (const n of ["images", "pngs"]) if (!r.result.objectStoreNames.contains(n)) r.result.createObjectStore(n, { keyPath: "id" });
+    };
     r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
   }));
 }
-async function tx(mode, fn) {
+async function tx(mode, fn, store = "images") {
   const d = await db();
   return new Promise((res, rej) => {
-    const t = d.transaction("images", mode); const out = fn(t.objectStore("images"));
+    const t = d.transaction(store, mode); const out = fn(t.objectStore(store));
     t.oncomplete = () => res(out.result); t.onerror = () => rej(t.error);
   });
 }
@@ -333,7 +336,7 @@ function paint(ctx, fk, overlay) {
   const pimg = imgOf(state.shared.productImg);
   const sc = v("imgScale");
   const bx = m, bw = maxW, ih = imgH * sc, iw = bw * sc;
-  const ix = bx + (bw - iw) / 2, iy = imgTop + (imgH - ih) / 2 + v("imgY");
+  const ix = bx + (bw - iw) / 2 + v("imgX"), iy = imgTop + (imgH - ih) / 2 + v("imgY");
   if (pimg) {
     ctx.save();
     if (v("shadow")) { ctx.shadowColor = "rgba(0,0,0,.45)"; ctx.shadowBlur = 50; ctx.shadowOffsetY = 25; }
@@ -687,28 +690,107 @@ function showView(v) {
   document.body.dataset.view = v;
   if (v === "editor") renderAll();
   if (v === "ads") renderAds();
+  if (v === "gallery") renderGallery();
   scrollTo(0, 0);
 }
 function newAd() { state = fresh(); adId = crypto.randomUUID(); dirty = false; selItem = selText = null; showView("editor"); }
 function openAd(rec) { state = normalize(JSON.parse(JSON.stringify(rec.state))); adId = rec.id; dirty = false; selItem = selText = null; showView("editor"); }
 function goHome() { flushSave(); adId = null; showView("home"); }
-function renderAds() {
+const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmtDate = t => new Date(t).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+let adUrls = [];
+async function renderAds() {
   const host = $("#adsList"), ads = readAds().sort((a, b) => b.updated - a.updated);
-  host.innerHTML = "";
+  adUrls.forEach(URL.revokeObjectURL); adUrls = [];
   if (!ads.length) { host.innerHTML = '<div class="empty">Você ainda não criou nenhum anúncio.</div>'; return; }
+  const pngs = new Map((await tx("readonly", s => s.getAll(), "pngs").catch(() => [])).map(p => [p.id, p]));
+  const frag = document.createDocumentFragment();
   for (const rec of ads) {
-    const sh = rec.state.shared || {}, row = document.createElement("div"); row.className = "adRow";
-    const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-    row.innerHTML = `<div class="info"><b>${esc(sh.name) || "Sem nome"}</b><small>${esc(sh.brand)}${sh.brand ? " · " : ""}Editado em ${new Date(rec.updated).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small></div><button class="x" title="Excluir anúncio">✕</button>`;
-    row.onclick = () => openAd(rec);
-    row.querySelector(".x").onclick = e => {
+    const row = document.createElement("div"); row.className = "adRow";
+    const png = rec.kind === "png" ? pngs.get(rec.id) : null;
+    if (rec.kind === "png") {
+      const url = png ? URL.createObjectURL(png.blob) : ""; if (url) adUrls.push(url);
+      row.innerHTML = `<img class="adThumb" src="${url}" alt=""><div class="info"><b>${esc(rec.name) || "Imagem"}</b><small>Imagem importada · ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir">✕</button>`;
+      row.onclick = () => png && openLightbox(url, rec.name);
+    } else {
+      const sh = rec.state.shared || {};
+      row.innerHTML = `<div class="info"><b>${esc(sh.name) || "Sem nome"}</b><small>${esc(sh.brand)}${sh.brand ? " · " : ""}Editado em ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir anúncio">✕</button>`;
+      row.onclick = () => openAd(rec);
+    }
+    row.querySelector(".x").onclick = async e => {
       e.stopPropagation();
       if (!confirm("Excluir este anúncio? Essa ação não pode ser desfeita.")) return;
+      if (rec.kind === "png") await tx("readwrite", s => s.delete(rec.id), "pngs");
       localStorage.setItem(ADS_KEY, JSON.stringify(readAds().filter(a => a.id !== rec.id))); renderAds();
     };
-    host.appendChild(row);
+    frag.appendChild(row);
   }
+  host.replaceChildren(frag);
 }
+function openLightbox(url, name) {
+  const lb = $("#lightbox"); $("#lbImg").src = url;
+  $("#lbDown").onclick = () => { const a = document.createElement("a"); a.href = url; a.download = (name || "anuncio") + ".png"; a.click(); };
+  lb.hidden = false;
+}
+$("#lbClose").onclick = () => { $("#lightbox").hidden = true; };
+$("#lightbox").onclick = e => { if (e.target.id === "lightbox") e.target.hidden = true; };
+
+/* ---------- Importar PNGs ---------- */
+async function importPngs(files) {
+  const imgs = [...files].filter(f => f.type.startsWith("image/"));
+  if (!imgs.length) return;
+  const ads = readAds();
+  for (const f of imgs) {
+    const id = crypto.randomUUID();
+    await tx("readwrite", s => s.put({ id, name: f.name, blob: f }), "pngs");
+    ads.unshift({ id, updated: Date.now(), kind: "png", name: f.name.replace(/\.[^.]+$/, "") });
+  }
+  localStorage.setItem(ADS_KEY, JSON.stringify(ads));
+  showView("ads");
+}
+$("#tileImport").onclick = () => $("#importFile").click();
+$("#importFile").onchange = e => { importPngs(e.target.files); e.target.value = ""; };
+
+/* ---------- Galeria ---------- */
+let galleryData = null;
+async function loadGallery() {
+  if (galleryData) return galleryData;
+  galleryData = [...(typeof GALLERY !== "undefined" ? GALLERY : [])];
+  try {
+    const r = await fetch("gallery.json?t=" + Date.now());
+    if (r.ok) galleryData.push(...await r.json());
+  } catch { }
+  return galleryData;
+}
+function galleryThumb(shared) {
+  const old = state, F = FORMATS.feed;
+  state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(shared)));
+  try {
+    const big = document.createElement("canvas"); big.width = F.w; big.height = F.h;
+    paint(big.getContext("2d"), "feed", false);
+    const c = document.createElement("canvas"); c.width = 320; c.height = Math.round(320 * F.h / F.w);
+    c.getContext("2d").drawImage(big, 0, 0, c.width, c.height);
+    return c;
+  } finally { state = old; }
+}
+async function renderGallery() {
+  const host = $("#galleryList");
+  host.innerHTML = '<div class="empty">Carregando…</div>';
+  const list = await loadGallery(), frag = document.createDocumentFragment();
+  for (const e of list) {
+    const card = document.createElement("div"); card.className = "gCard";
+    card.appendChild(galleryThumb(e.shared));
+    const info = document.createElement("div"); info.className = "gInfo";
+    info.innerHTML = `<b>${esc(e.title)}</b><small>por ${esc(e.author || "Comunidade")}</small><button class="primary">Usar como base</button>`;
+    info.querySelector("button").onclick = () => {
+      state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(e.shared)));
+      adId = crypto.randomUUID(); dirty = true; selItem = selText = null; showView("editor");
+    };
+    card.appendChild(info); frag.appendChild(card);
+  }
+  host.replaceChildren(frag);
+}
+$("#tileGallery").onclick = () => showView("gallery");
 $("#tileNew").onclick = newAd;
 $("#tileList").onclick = () => showView("ads");
 $("#tileGuide").onclick = () => showView("guide");

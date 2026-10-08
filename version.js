@@ -1,11 +1,11 @@
 // Para publicar uma atualização, troque só este número (ex.: "4" → "5").
 // Ele força o navegador a baixar as versões novas do style.css, qrcode.js e app.js.
-var VERSION = "10";
+var VERSION = "17";
 
 document.write(
   '<link rel="stylesheet" href="style.css?v=' + VERSION + '">' +
   '<script defer src="qrcode.js?v=' + VERSION + '"><\/script>' +
-  '<script defer src="app.js?v=' + VERSION + '"><\/script>'
+  '<script defer src="gallery.js?v='  + VERSION + '"><\/script>' +  '<script defer src="app.js?v=' + VERSION + '"><\/script>'
 );
 
 // Aviso temporário quando o visitante abre o site depois de uma atualização

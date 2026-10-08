@@ -24,9 +24,17 @@
         <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1" fill="#fff"/><circle cx="3.5" cy="12" r="1" fill="#fff"/><circle cx="3.5" cy="18" r="1" fill="#fff"/></svg>
         <b>Meus anúncios</b>
       </button>
+      <button class="tile sm" id="tileImport" title="Adicionar PNGs à lista de anúncios">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7.5 7.5 12 3l4.5 4.5M4 14v6h16v-6"/></svg>
+        <b>Importar anúncios</b>
+      </button>
       <button class="tile" id="tileNew" title="Criar novo anúncio">
         <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M12 3v18M3 12h18"/></svg>
         <b>Criar novo anúncio</b>
+      </button>
+      <button class="tile sm" id="tileGallery" title="Exemplos de anúncios">
+        <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg>
+        <b>Galeria de anúncios</b>
       </button>
       <button class="tile" id="tileGuide" title="Guia de uso">
         <svg viewBox="0 0 24 24" width="64" height="64" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.6 2.2c-.7.4-1.1.9-1.1 1.8"/><circle cx="12" cy="17" r=".6" fill="#fff"/></svg>
@@ -42,6 +50,19 @@
     <div id="adsList"></div>
   </div>
 </section>
+
+<section id="galleryView" class="view">
+  <div class="page wide">
+    <h2>Galeria de anúncios</h2>
+    <p class="lead">Exemplos para você se inspirar. Clique em <b>Usar como base</b> para copiar o anúncio para o seu editor e adaptar com seus dados.</p>
+    <div id="galleryList" class="gGrid"></div>
+  </div>
+</section>
+
+<input type="file" id="importFile" accept="image/*" multiple hidden>
+<div id="lightbox" hidden>
+  <div class="lbBox"><img id="lbImg" alt=""><div class="lbBtns"><button id="lbDown" class="primary">Baixar PNG</button><button id="lbClose">Fechar</button></div></div>
+</div>
 
 <section id="guideView" class="view">
   <div class="page guide">
@@ -60,10 +81,13 @@
     </div>
 
     <h3>1. Tela inicial</h3>
-    <figure><img src="img/tiles.png" alt="Os três quadrados da tela inicial"><figcaption>Os três quadrados da tela inicial: Meus anúncios, Criar novo anúncio e Guia de uso.</figcaption></figure>
+    <figure><img src="img/tiles.png" alt="Os cinco quadrados da tela inicial"><figcaption>Tela inicial: Meus anúncios, Importar anúncios, Criar novo anúncio, Galeria de anúncios e Guia de uso.</figcaption></figure>
+    <figure><img src="img/galeria.png" alt="Galeria de anúncios"><figcaption>A galeria mostra modelos prontos. O botão "Usar como base" copia o modelo para o editor.</figcaption></figure>
     <ul>
       <li><b>Criar novo anúncio (+):</b> abre o editor com um anúncio em branco.</li>
       <li><b>Meus anúncios:</b> lista os anúncios que você já criou neste navegador. Clique em um para continuar editando; o ✕ exclui o anúncio da lista.</li>
+      <li><b>Importar anúncios:</b> escolha um ou mais arquivos PNG (ou JPG) do seu computador. Eles entram na lista "Meus anúncios" com uma miniatura; clique para ver em tamanho grande e baixar de novo. Imagens importadas não são editáveis.</li>
+      <li><b>Galeria de anúncios:</b> exemplos prontos para se inspirar. Clique em "Usar como base" para copiar o modelo para o editor e trocar pelos seus dados.</li>
       <li><b>Guia de uso:</b> esta página.</li>
       <li><b>← Tela inicial:</b> botão no topo que volta ao início. Tudo o que você alterou já fica salvo automaticamente.</li>
     </ul>
@@ -109,7 +133,7 @@
       <li><b>Alinhamento:</b> alinhamento geral dos textos (esquerda, centro ou direita).</li>
       <li><b>Tamanho do nome / da descrição / do preço:</b> controles deslizantes para aumentar ou diminuir cada um.</li>
       <li><b>Foto do produto (acima ou abaixo do texto):</b> escolhe se a foto fica em cima ou embaixo dos textos.</li>
-      <li><b>Escala da foto e Deslocar foto (vertical):</b> aumentam/diminuem a foto e sobem/descem a foto.</li>
+      <li><b>Escala da foto e Deslocar foto (vertical / horizontal):</b> aumentam/diminuem a foto e movem a foto para cima/baixo ou para a esquerda/direita.</li>
       <li><b>Sombra na foto:</b> liga ou desliga a sombra atrás da foto.</li>
     </ul>
 
