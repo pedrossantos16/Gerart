@@ -1,7 +1,7 @@
 *{box-sizing:border-box}
-body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:#14151a;color:#e8e8ee;height:100vh;display:flex;flex-direction:column}
+body{margin:0;font-family:"Segoe UI",Arial,sans-serif;background:linear-gradient(160deg,#0b0c12 0%,#14152a 55%,#1f1030 100%) fixed;color:#e8e8ee;height:100vh;display:flex;flex-direction:column}
 header{display:flex;align-items:center;gap:10px;padding:10px 16px;background:#1d1f27;border-bottom:1px solid #2d3040}
-header h1{margin:0;font-size:20px}
+header h1{margin:0;font-size:30px}
 .sub{color:#8d91a5;font-size:13px}
 .spacer{flex:1}
 button{background:#2d3040;color:#fff;border:0;border-radius:6px;padding:8px 12px;cursor:pointer;font:inherit;font-size:13px}
@@ -11,6 +11,41 @@ button.ghost{background:transparent;border:1px solid #3a3e54}
 button.small{padding:4px 8px;font-size:12px}
 main{flex:1;display:flex;min-height:0}
 header{flex-shrink:0}
+.view{display:none;flex:1;min-height:0;overflow:auto}
+body[data-view=home] #home{display:flex}
+body[data-view=ads] #adsView,body[data-view=guide] #guideView{display:block}
+body:not([data-view=editor]) main{display:none}
+body:not([data-view=editor]) #btnOne,body:not([data-view=editor]) #btnZip{display:none}
+body[data-view=home] #btnHome{display:none}
+#home{align-items:center;justify-content:center;padding:20px}
+.homeWrap{text-align:center}
+.homeWrap h2{margin:0 0 28px;font-weight:600;font-size:22px}
+.tiles{display:flex;gap:24px;flex-wrap:wrap;justify-content:center}
+.tile{width:230px;height:230px;background:#12131a;border:1px solid #33374a;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-size:16px;padding:12px}
+.tile:hover{border-color:#e1306c;background:#171923}
+.tile svg{display:block;flex:none}
+.tile .bigplus{font-size:84px;line-height:1;font-weight:200}
+.tile small{color:#8d91a5;font-size:12px;max-width:85%}
+.page{max-width:820px;margin:0 auto;padding:24px 18px 60px}
+.page h2{margin:0 0 18px;font-size:24px}
+.adRow{display:flex;align-items:center;gap:10px;background:#12131a;border:1px solid #33374a;border-radius:10px;padding:12px 14px;margin-bottom:10px;cursor:pointer}
+.adRow:hover{border-color:#e1306c}
+.adRow .info{flex:1;min-width:0}
+.adRow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adRow small{color:#8d91a5}
+.empty{color:#8d91a5;text-align:center;padding:40px 0}
+.guide h3{margin:26px 0 8px;color:#fff;border-bottom:1px solid #2d3040;padding-bottom:6px}
+.guide .lead{color:#c9cbd6;line-height:1.5}
+.guide ul{padding-left:20px;line-height:1.55;color:#c9cbd6}
+.guide li{margin:5px 0}
+.guide b{color:#fff}
+.guide figure{margin:12px 0;padding:12px;background:#12131a;border:1px solid #2d3040;border-radius:12px;text-align:center}
+.guide figure img{max-width:100%;height:auto;border-radius:8px;border:1px solid #2d3040;display:block;margin:0 auto}
+.guide figcaption{margin-top:8px;font-size:13px;color:#9a9cab;line-height:1.4}
+.guide .steps{background:#12131a;border:1px solid #e1306c;border-radius:12px;padding:6px 18px 10px;margin:18px 0}
+.guide .steps h4{margin:10px 0 4px;color:#fff;font-size:16px}
+.guide .steps ol{padding-left:20px;line-height:1.7;color:#c9cbd6;margin:0}
+.guide .tip{background:#12131a;border-left:3px solid #ffd400;padding:10px 14px;border-radius:6px;color:#c9cbd6;line-height:1.5}
 aside{width:var(--side,380px);flex:none;overflow-y:auto;background:#191b22;padding:10px}
 #resizer{width:7px;flex:none;cursor:col-resize;background:#2d3040;touch-action:none;transition:background .15s}
 #resizer:hover,#resizer.drag{background:#e1306c}
@@ -81,7 +116,7 @@ canvas{max-width:100%;max-height:100%;background:#000;box-shadow:0 8px 30px #000
 @media (max-width:820px){
   body{height:100vh;height:100dvh}
   header{flex-wrap:wrap;gap:6px;padding:8px 10px}
-  header h1{font-size:17px}
+  header h1{font-size:24px}
   .sub{display:none}
   header button{padding:7px 9px;font-size:12px}
   .spacer{display:none}
@@ -93,6 +128,10 @@ canvas{max-width:100%;max-height:100%;background:#000;box-shadow:0 8px 30px #000
   #info{margin-top:2px}
   aside{width:100%;flex:1;padding:8px;-webkit-overflow-scrolling:touch}
   #resizer{display:none}
+  .tile{width:100%;max-width:340px;height:120px;flex-direction:row;gap:14px}
+  .tile svg{width:44px;height:44px}
+  .tile .bigplus{font-size:56px}
+  .tile small{display:none}
   .field input[type=text],.field textarea,.field select,.field input[type=number],.item input,.item select{font-size:16px}
   .library{grid-template-columns:repeat(3,1fr)}
   .thumb .x{width:26px;height:26px;line-height:24px;font-size:16px}

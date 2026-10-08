@@ -40,7 +40,8 @@ const DEFAULT_SHARED = {
 };
 
 const $ = s => document.querySelector(s);
-let state = load() || fresh();
+let state = fresh();
+let adId = null, dirty = false;
 let selItem = null, selText = null, hits = [];
 const view = { grid: true, safe: false };
 
@@ -49,20 +50,40 @@ function fresh() {
   for (const k in FORMATS) formats[k] = { cols: FORMATS[k].cols, rows: FORMATS[k].rows, over: {}, items: [] };
   return { shared: { ...DEFAULT_SHARED }, formats, active: "feed", scope: "all" };
 }
-function load() {
+function normalize(s) {
+  s.shared = { ...DEFAULT_SHARED, ...s.shared };
+  const mig = o => { if (!o.stops && (o.bg1 || o.bg2)) o.stops = [{ c: o.bg1 || DEFAULT_SHARED.stops[0].c }, { c: o.bg2 || DEFAULT_SHARED.stops[1].c }]; delete o.bg1; delete o.bg2; };
+  mig(s.shared);
+  s.formats = s.formats || {};
+  for (const k in FORMATS) s.formats[k] = { cols: FORMATS[k].cols, rows: FORMATS[k].rows, over: {}, items: [], ...s.formats[k] };
+  for (const k in FORMATS) mig(s.formats[k].over);
+  s.active = s.active in FORMATS ? s.active : "feed"; s.scope = s.scope || "all";
+  return s;
+}
+
+/* ---------- Lista de anúncios salvos ---------- */
+const ADS_KEY = "gerart-ads";
+function readAds() { try { return JSON.parse(localStorage.getItem(ADS_KEY)) || []; } catch { return []; } }
+function migrateLegacy() {
+  if (localStorage.getItem(ADS_KEY) !== null) return;
+  const raw = localStorage.getItem("gerart-state"); if (!raw) return;
   try {
-    const s = JSON.parse(localStorage.getItem("gerart-state"));
-    if (!s) return null;
-    s.shared = { ...DEFAULT_SHARED, ...s.shared };
-    const mig = o => { if (!o.stops && (o.bg1 || o.bg2)) o.stops = [{ c: o.bg1 || DEFAULT_SHARED.stops[0].c }, { c: o.bg2 || DEFAULT_SHARED.stops[1].c }]; delete o.bg1; delete o.bg2; };
-    mig(s.shared);
-    for (const k in FORMATS) s.formats[k] = { cols: FORMATS[k].cols, rows: FORMATS[k].rows, over: {}, items: [], ...s.formats[k] };
-    for (const k in FORMATS) mig(s.formats[k].over);
-    return s;
-  } catch { return null; }
+    localStorage.setItem(ADS_KEY, JSON.stringify([{ id: crypto.randomUUID(), updated: Date.now(), state: JSON.parse(raw) }]));
+    localStorage.removeItem("gerart-state");
+  } catch { }
 }
 let saveT;
-function save() { clearTimeout(saveT); saveT = setTimeout(() => localStorage.setItem("gerart-state", JSON.stringify(state)), 200); }
+function flushSave() {
+  clearTimeout(saveT);
+  if (!adId || !dirty) return;
+  const ads = readAds(), rec = { id: adId, updated: Date.now(), state };
+  const i = ads.findIndex(a => a.id === adId);
+  if (i < 0) ads.unshift(rec); else ads[i] = rec;
+  try { localStorage.setItem(ADS_KEY, JSON.stringify(ads)); dirty = false; }
+  catch { alert("Não foi possível salvar: o armazenamento do navegador está cheio."); }
+}
+function save() { dirty = true; clearTimeout(saveT); saveT = setTimeout(flushSave, 200); }
+addEventListener("pagehide", flushSave);
 
 const cur = () => state.formats[state.active];
 const get = (fk, k) => (k in state.formats[fk].over ? state.formats[fk].over[k] : state.shared[k]);
@@ -661,10 +682,37 @@ $("#btnZip").onclick = async e => {
     download(makeZip(files), `anuncio-${slug()}.zip`);
   } finally { b.textContent = old; b.disabled = false; }
 };
-$("#btnNew").onclick = () => {
-  if (!confirm("Começar um novo anúncio? A biblioteca de detalhes visuais será mantida.")) return;
-  state = fresh(); selItem = null; renderAll(); save();
-};
+/* ---------- Telas ---------- */
+function showView(v) {
+  document.body.dataset.view = v;
+  if (v === "editor") renderAll();
+  if (v === "ads") renderAds();
+  scrollTo(0, 0);
+}
+function newAd() { state = fresh(); adId = crypto.randomUUID(); dirty = false; selItem = selText = null; showView("editor"); }
+function openAd(rec) { state = normalize(JSON.parse(JSON.stringify(rec.state))); adId = rec.id; dirty = false; selItem = selText = null; showView("editor"); }
+function goHome() { flushSave(); adId = null; showView("home"); }
+function renderAds() {
+  const host = $("#adsList"), ads = readAds().sort((a, b) => b.updated - a.updated);
+  host.innerHTML = "";
+  if (!ads.length) { host.innerHTML = '<div class="empty">Você ainda não criou nenhum anúncio.</div>'; return; }
+  for (const rec of ads) {
+    const sh = rec.state.shared || {}, row = document.createElement("div"); row.className = "adRow";
+    const esc = s => String(s || "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    row.innerHTML = `<div class="info"><b>${esc(sh.name) || "Sem nome"}</b><small>${esc(sh.brand)}${sh.brand ? " · " : ""}Editado em ${new Date(rec.updated).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</small></div><button class="x" title="Excluir anúncio">✕</button>`;
+    row.onclick = () => openAd(rec);
+    row.querySelector(".x").onclick = e => {
+      e.stopPropagation();
+      if (!confirm("Excluir este anúncio? Essa ação não pode ser desfeita.")) return;
+      localStorage.setItem(ADS_KEY, JSON.stringify(readAds().filter(a => a.id !== rec.id))); renderAds();
+    };
+    host.appendChild(row);
+  }
+}
+$("#tileNew").onclick = newAd;
+$("#tileList").onclick = () => showView("ads");
+$("#tileGuide").onclick = () => showView("guide");
+$("#btnHome").onclick = () => document.body.dataset.view === "editor" ? goHome() : showView("home");
 addEventListener("resize", fitCanvas);
 
 (function sideResizer() {
@@ -695,5 +743,5 @@ if (window.ResizeObserver) new ResizeObserver(fitCanvas).observe($(".canvasWrap"
     library = await idbAll();
     library.forEach(r => r.url = URL.createObjectURL(r.blob));
   } catch (e) { console.warn("IndexedDB indisponível", e); }
-  renderAll();
+  migrateLegacy(); showView("home");
 })();
