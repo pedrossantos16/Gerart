@@ -77,8 +77,8 @@ let saveT;
 function flushSave() {
   clearTimeout(saveT);
   if (!adId || !dirty) return;
-  const ads = readAds(), rec = { id: adId, updated: Date.now(), state };
-  const i = ads.findIndex(a => a.id === adId);
+  const ads = readAds(), i = ads.findIndex(a => a.id === adId), rec = { id: adId, updated: Date.now(), state };
+  if (i >= 0 && ads[i].name) rec.name = ads[i].name;
   if (i < 0) ads.unshift(rec); else ads[i] = rec;
   try { localStorage.setItem(ADS_KEY, JSON.stringify(ads)); dirty = false; }
   catch { alert("Não foi possível salvar: o armazenamento do navegador está cheio."); }
@@ -710,11 +710,12 @@ async function renderAds() {
     const png = rec.kind === "png" ? pngs.get(rec.id) : null;
     if (rec.kind === "png") {
       const url = png ? URL.createObjectURL(png.blob) : ""; if (url) adUrls.push(url);
-      row.innerHTML = `<img class="adThumb" src="${url}" alt=""><div class="info"><b>${esc(rec.name) || "Imagem"}</b><small>Imagem importada · ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir">✕</button>`;
-      row.onclick = () => png && openLightbox(url, rec.name);
+      row.innerHTML = `<img class="adThumb" src="${url}" alt="" title="Ver em tamanho grande"><div class="info"><b>${esc(rec.name) || "Imagem"}</b><small>Imagem importada · clique para editar · ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir">✕</button>`;
+      row.onclick = () => editPng(rec);
+      row.querySelector(".adThumb").onclick = e => { e.stopPropagation(); if (png) openLightbox(url, rec.name); };
     } else {
       const sh = rec.state.shared || {};
-      row.innerHTML = `<div class="info"><b>${esc(sh.name) || "Sem nome"}</b><small>${esc(sh.brand)}${sh.brand ? " · " : ""}Editado em ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir anúncio">✕</button>`;
+      row.innerHTML = `<div class="info"><b>${esc(sh.name) || esc(rec.name) || "Sem nome"}</b><small>${esc(sh.brand)}${sh.brand ? " · " : ""}Editado em ${fmtDate(rec.updated)}</small></div><button class="x" title="Excluir anúncio">✕</button>`;
       row.onclick = () => openAd(rec);
     }
     row.querySelector(".x").onclick = async e => {
@@ -735,6 +736,28 @@ function openLightbox(url, name) {
 $("#lbClose").onclick = () => { $("#lightbox").hidden = true; };
 $("#lightbox").onclick = e => { if (e.target.id === "lightbox") e.target.hidden = true; };
 
+async function ensureLibImg(id, name, blob) {
+  if (library.some(l => l.id === id)) return;
+  await idbPut({ id, name, blob, orig: null, noBg: false });
+  library.push({ id, name, blob, orig: null, noBg: false, url: URL.createObjectURL(blob) });
+}
+async function editPng(rec) {
+  const png = (await tx("readonly", s => s.get(rec.id), "pngs").catch(() => null));
+  if (!png) { alert("Não foi possível abrir esta imagem."); return; }
+  await ensureLibImg(rec.id, png.name, png.blob);
+  const st = fresh();
+  Object.assign(st.shared, { brand: "", name: "", desc: "", oldPrice: "", price: "", cta: "", link: "" });
+  for (const k in st.formats) {
+    const f = st.formats[k];
+    f.items.push({ id: crypto.randomUUID(), imgId: rec.id, col: 1, row: 1, cs: f.cols, rs: f.rows, layer: "back", fit: "cover", opacity: 1 });
+  }
+  const ads = readAds(), i = ads.findIndex(a => a.id === rec.id);
+  const nrec = { id: rec.id, updated: Date.now(), name: rec.name, state: st };
+  if (i >= 0) ads[i] = nrec;
+  localStorage.setItem(ADS_KEY, JSON.stringify(ads));
+  openAd(nrec); dirty = true;
+}
+
 /* ---------- Importar PNGs ---------- */
 async function importPngs(files) {
   const imgs = [...files].filter(f => f.type.startsWith("image/"));
@@ -743,6 +766,7 @@ async function importPngs(files) {
   for (const f of imgs) {
     const id = crypto.randomUUID();
     await tx("readwrite", s => s.put({ id, name: f.name, blob: f }), "pngs");
+    await ensureLibImg(id, f.name, f);
     ads.unshift({ id, updated: Date.now(), kind: "png", name: f.name.replace(/\.[^.]+$/, "") });
   }
   localStorage.setItem(ADS_KEY, JSON.stringify(ads));
@@ -762,32 +786,65 @@ async function loadGallery() {
   } catch { }
   return galleryData;
 }
-function galleryThumb(shared) {
+const galImgs = new Map(); // svg -> id (só para miniaturas)
+function galImgId(svg) {
+  if (galImgs.has(svg)) return galImgs.get(svg);
+  const id = "gal:" + galImgs.size, img = new Image();
+  img.onload = () => { img.loaded = true; img.ready = Promise.resolve(img); if (typeof galleryRedraw === "function") galleryRedraw(); };
+  img.src = svg; imgCache.set(id, img); galImgs.set(svg, id);
+  return id;
+}
+let galleryRedraw = null;
+const mapRow = (r, k) => Math.round((r - 1) * FORMATS[k].rows / FORMATS.feed.rows) + 1;
+function galleryItems(e, k, idOf) {
+  const sc = FORMATS[k].rows / FORMATS.feed.rows;
+  return (e.items || []).map(d => ({
+    id: crypto.randomUUID(), imgId: idOf(d.svg), col: d.col, row: mapRow(d.row, k), cs: d.cs, rs: Math.max(1, Math.round(d.rs * sc)),
+    layer: d.layer || "front", fit: "contain", opacity: d.opacity == null ? 1 : d.opacity, rot: d.rot || 0, flip: !!d.flip
+  }));
+}
+function galleryThumb(e) {
   const old = state, F = FORMATS.feed;
-  state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(shared)));
-  try {
-    const big = document.createElement("canvas"); big.width = F.w; big.height = F.h;
-    paint(big.getContext("2d"), "feed", false);
-    const c = document.createElement("canvas"); c.width = 320; c.height = Math.round(320 * F.h / F.w);
-    c.getContext("2d").drawImage(big, 0, 0, c.width, c.height);
-    return c;
-  } finally { state = old; }
+  state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(e.shared)));
+  state.formats.feed.items = galleryItems(e, "feed", galImgId);
+  const c = document.createElement("canvas"); c.width = 320; c.height = Math.round(320 * F.h / F.w);
+  const render = () => {
+    const keep = state; state = th;
+    try {
+      const big = document.createElement("canvas"); big.width = F.w; big.height = F.h;
+      paint(big.getContext("2d"), "feed", false);
+      const x = c.getContext("2d"); x.clearRect(0, 0, c.width, c.height); x.drawImage(big, 0, 0, c.width, c.height);
+    } finally { state = keep; }
+  };
+  const th = state; state = old;
+  render(); c.redraw = render;
+  return c;
+}
+async function useGalleryAd(e) {
+  state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(e.shared)));
+  const ids = new Map();
+  for (const d of e.items || []) {
+    if (ids.has(d.svg)) continue;
+    const blob = await (await fetch(d.svg)).blob(), id = crypto.randomUUID();
+    await ensureLibImg(id, "detalhe.svg", blob); ids.set(d.svg, id);
+  }
+  for (const k in state.formats) state.formats[k].items = galleryItems(e, k, s => ids.get(s));
+  adId = crypto.randomUUID(); dirty = true; selItem = selText = null; showView("editor");
 }
 async function renderGallery() {
   const host = $("#galleryList");
   host.innerHTML = '<div class="empty">Carregando…</div>';
-  const list = await loadGallery(), frag = document.createDocumentFragment();
+  const list = await loadGallery(), frag = document.createDocumentFragment(), thumbs = [];
   for (const e of list) {
     const card = document.createElement("div"); card.className = "gCard";
-    card.appendChild(galleryThumb(e.shared));
+    const th = galleryThumb(e); thumbs.push(th);
+    card.appendChild(th);
     const info = document.createElement("div"); info.className = "gInfo";
     info.innerHTML = `<b>${esc(e.title)}</b><small>por ${esc(e.author || "Comunidade")}</small><button class="primary">Usar como base</button>`;
-    info.querySelector("button").onclick = () => {
-      state = fresh(); Object.assign(state.shared, JSON.parse(JSON.stringify(e.shared)));
-      adId = crypto.randomUUID(); dirty = true; selItem = selText = null; showView("editor");
-    };
+    info.querySelector("button").onclick = () => useGalleryAd(e);
     card.appendChild(info); frag.appendChild(card);
   }
+  galleryRedraw = () => thumbs.forEach(t => t.redraw());
   host.replaceChildren(frag);
 }
 $("#tileGallery").onclick = () => showView("gallery");
